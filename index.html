@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FastAPI Group Chat</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<div class="chat-container">
+
+    <div class="sidebar">
+
+        <h3>Online Users</h3>
+
+        <div id="users"></div>
+
+    </div>
+
+    <div class="main">
+
+        <div class="top">
+
+            <input type="text" id="username" placeholder="Username">
+
+            <input type="text" id="group" placeholder="Group">
+
+            <button onclick="connectWS()">
+                Join
+            </button>
+
+        </div>
+
+        <div class="messages" id="messages"></div>
+
+        <div class="typing" id="typing"></div>
+
+        <div class="bottom">
+
+            <input
+                type="text"
+                id="messageInput"
+                placeholder="Type message..."
+            >
+
+            <button onclick="sendMessage()">
+                Send
+            </button>
+
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+    let ws = null;
+    let currentUser = "";
+    let typingTimeout = null;
+    const messages = document.getElementById("messages");
+    const typingDiv = document.getElementById("typing");
+    const usersDiv = document.getElementById("users");
+    function connectWS(){
+        const username =
+            document.getElementById("username").value.trim();
+
+        const group =
+            document.getElementById("group").value.trim();
+
+        if(!username || !group){
+            alert("Enter username and group");
+            return;
+        }
+
+        currentUser = username;
+
+        const protocol =
+            location.protocol === "https:" ? "wss" : "ws";
+
+        ws = new WebSocket(
+            `${protocol}://${location.host}/ws/${group}?client_id=${username}`
+        );
+
+        ws.onmessage = (event) => {
+
+            const data = JSON.parse(event.data);
+
+            // ONLINE USERS
+            if(data.type === "online_users"){
+
+                usersDiv.innerHTML = "";
+                // console.log(data)
+                data.users.forEach(user => {
+
+                    const div = document.createElement("div");
+
+                    div.className = "user";
+
+                    div.textContent = user;
+
+                    usersDiv.appendChild(div);
+                });
+
+                return;
+            }
+
+            // TYPING
+            if(data.type === "typing" && currentUser != data.user){
+
+                typingDiv.textContent =
+                    `${data.user} is typing...`;
+
+                clearTimeout(typingTimeout);
+
+                typingTimeout = setTimeout(() => {
+                    typingDiv.textContent = "";
+                }, 1000);
+
+                return;
+            }
+
+            // MENTION
+            if(data.type === "mention"){
+
+                alert(`${data.from} mentioned you`);
+
+                return;
+            }
+
+            const div = document.createElement("div");
+
+            if(data.type === "system"){
+
+                div.classList.add("msg","system");
+
+            }else{
+
+                div.classList.add("msg");
+
+                if(data.user === currentUser){
+                    div.classList.add("self");
+                }
+
+                if(data.message.includes(`@${currentUser}`)){
+                    div.classList.add("mention");
+                }
+            }
+
+            // SAFE rendering
+            div.innerHTML = `
+                <div class="meta">
+                    ${(data.user || "System")} • ${data.time}
+                </div>
+
+                <div></div>
+            `;
+
+            div.querySelector("div:last-child").textContent =
+                data.message;
+
+            messages.appendChild(div);
+
+            messages.scrollTop = messages.scrollHeight;
+        };
+
+        ws.onclose = (event) => {
+            if(event.code === 4000){
+                alert("Username already taken");
+            }
+        };
+    }
+
+    function sendMessage(){
+
+        const input =
+            document.getElementById("messageInput");
+
+        const text = input.value.trim();
+
+        if(!text || !ws){
+            return;
+        }
+
+        ws.send(JSON.stringify({
+            type:"chat",
+            message:text
+        }));
+
+        input.value = "";
+    }
+
+    // ENTER KEY
+    document
+        .getElementById("messageInput")
+        .addEventListener("keydown", (event) => {
+
+            if(event.key === "Enter"){
+                sendMessage();
+            }
+        });
+
+    // TYPING EVENTS
+    let isTyping = false;
+
+document
+    .getElementById("messageInput")
+    .addEventListener("input", () => {
+
+        if(!ws) return;
+
+        // Prevent spam events
+        if(isTyping) return;
+
+        isTyping = true;
+
+        ws.send(JSON.stringify({
+            type:"typing"
+        }));
+
+        // Reset after 1 second
+        setTimeout(() => {
+            isTyping = false;
+        }, 1000);
+    });
+</script>
+</body>
+</html>

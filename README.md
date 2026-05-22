@@ -1,4 +1,4 @@
-# FastAPI Real-Time Group Chat (WebSockets + Redis)
+# v2.2 FastAPI Real-Time Group Chat (WebSockets + Redis)
 
 A real-time group chat application built with **FastAPI**, **WebSockets**, and **Redis Pub/Sub**, fully containerized using **Docker** and **Docker Compose**.
 
